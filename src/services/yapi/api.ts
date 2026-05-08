@@ -75,18 +75,26 @@ export class YApiService {
   private async request<T>(endpoint: string, params: Record<string, any> = {}, projectId?: string, method: 'GET' | 'POST' = 'GET'): Promise<T> {
     try {
       this.logger.debug(`调用 ${this.baseUrl}${endpoint} 方法: ${method}`);
-      
+
       // 使用项目ID获取对应的token，如果没有提供项目ID则使用默认token
       const token = projectId ? this.getToken(projectId) : this.defaultToken;
-      
+
       if (!token) {
         throw new Error(`未配置项目ID ${projectId} 的token`);
       }
-      
+
+      const axiosConfig = {
+        timeout: 30000,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+        maxRedirects: 5,
+      };
+
       let response;
-      
+
       if (method === 'GET') {
         response = await axios.get(`${this.baseUrl}${endpoint}`, {
+          ...axiosConfig,
           params: {
             ...params,
             token: token
@@ -96,18 +104,22 @@ export class YApiService {
         response = await axios.post(`${this.baseUrl}${endpoint}`, {
           ...params,
           token: token
-        });
+        }, axiosConfig);
       }
 
       return response.data;
     } catch (error) {
       if (error instanceof AxiosError && error.response) {
-        throw {
-          status: error.response.status,
-          message: error.response.data?.errmsg || "未知错误",
-        };
+        const status = error.response.status;
+        const errmsg = error.response.data?.errmsg || "未知错误";
+        this.logger.error(`YApi返回错误 status=${status}, errmsg=${errmsg}, endpoint=${endpoint}`);
+        throw new Error(`YApi服务器错误(${status}): ${errmsg}`);
       }
-      throw new Error("与YApi服务器通信失败");
+      if (error instanceof AxiosError && error.code) {
+        this.logger.error(`Axios错误 code=${error.code}, message=${error.message}`);
+        throw new Error(`网络错误(${error.code}): ${error.message}`);
+      }
+      throw error;
     }
   }
 

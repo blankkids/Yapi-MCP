@@ -256,18 +256,21 @@ export class YapiMcpServer {
             }
           }
 
-          if (req_body_type) {
-            params.req_body_type = req_body_type;
-          }
-
           if (req_body_form) {
             try {
-              params.req_body_form = JSON.parse(req_body_form);
+              const parsed = JSON.parse(req_body_form);
+              // YApi 不接受空数组的 req_body_form，会返回服务器错误
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                params.req_body_form = parsed;
+                params.req_body_type = req_body_type || 'form';
+              }
             } catch (e) {
               return {
                 content: [{ type: "text", text: `表单请求体JSON解析错误: ${e}` }],
               };
             }
+          } else if (req_body_type) {
+            params.req_body_type = req_body_type;
           }
 
           if (req_body_other) {
